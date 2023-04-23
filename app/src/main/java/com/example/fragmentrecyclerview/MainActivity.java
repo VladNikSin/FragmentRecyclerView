@@ -1,10 +1,16 @@
 package com.example.fragmentrecyclerview;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
 
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
 import android.app.Dialog;
+import android.content.DialogInterface;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -16,9 +22,12 @@ import android.widget.Toast;
 
 import com.example.fragmentrecyclerview.data.User;
 import com.example.fragmentrecyclerview.data.UserAdapter;
+import com.google.android.material.snackbar.Snackbar;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import it.xabaras.android.recyclerview.swipedecorator.RecyclerViewSwipeDecorator;
 
 public class MainActivity extends AppCompatActivity {
     ArrayList<User> users = new ArrayList<>();
@@ -33,9 +42,7 @@ public class MainActivity extends AppCompatActivity {
 
         UserAdapter.OnLongUserClickListener userClickListener = new UserAdapter.OnLongUserClickListener() {
             @Override
-            //public void onLongUserClick(User user, int position, View view) {
             public void onLongUserClick( View view, int position) {
-                //showMenu(findViewById(R.id.itemName));
                 showMenu(view, position);
             }
 
@@ -43,8 +50,82 @@ public class MainActivity extends AppCompatActivity {
 
         adapter = new UserAdapter(this, users(), userClickListener);
         recyclerView.setAdapter(adapter);
+        ItemTouchHelper itemTouchHelper = new ItemTouchHelper(simpleCallback);
+        itemTouchHelper.attachToRecyclerView(recyclerView);
     }
+    //----------начало работы со свайпом---------------
+    //запоминаю удаленный объект
+    User deletedUser = null;
+    ItemTouchHelper.Callback simpleCallback = new ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT|ItemTouchHelper.RIGHT) {
+        @Override
+        public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, @NonNull RecyclerView.ViewHolder target) {
+            return false;
+        }
 
+        @Override
+        public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
+            int position = viewHolder.getAdapterPosition();
+            switch (direction) {
+                case ItemTouchHelper.LEFT:{
+                    //--------Тут начинаем задавать различные вопросы
+                    deletedUser = users.get(position);
+                    new AlertDialog.Builder(MainActivity.this)
+                            //.setIcon(R.drawable.ic_delete)
+                            .setTitle("Удаление пользователя")
+                            .setMessage("Удалить пользователя " + deletedUser.getName() + "?")
+
+                            .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+                                public void onClick(DialogInterface dialog, int which) {
+
+                                    users.remove(position);
+                                    adapter.notifyItemRemoved(position);
+                                    //в качестве бонуса добавив внизу снэкбар для восстановления удаленной записи
+                                    Snackbar.make(recyclerView, "Пользователь " + deletedUser.getName() + " удален!", Snackbar.LENGTH_LONG)
+                                            .setAction("Восстановить?", new View.OnClickListener() {
+                                                @Override
+                                                public void onClick(View view) {
+                                                    users.add(position, deletedUser);
+                                                    //adapter.notifyDataSetChanged(); //можно так, но...
+                                                    adapter.notifyItemInserted(position); //так лучше!
+                                                }
+                                            }).show();
+                                }
+                            })
+                            // если передумали, то просто обновляем наш Recycler
+                            .setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialogInterface, int i) {
+                                    adapter.notifyItemRemoved(position); //так лучше!
+                                    adapter.notifyItemInserted(position);
+                                }
+                            })
+                            .setIcon(android.R.drawable.ic_dialog_alert)
+                            .show();
+
+                    break;
+                }
+                case ItemTouchHelper.RIGHT:{
+                    onEdit(findViewById(R.id.userList), position);
+                    break;
+                }
+                default: return;
+            }
+        }
+
+        @Override
+            public void onChildDraw(@NonNull Canvas c, @NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, float dX, float dY, int actionState, boolean isCurrentlyActive) {
+            new RecyclerViewSwipeDecorator.Builder(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
+                    .addSwipeLeftBackgroundColor(ContextCompat.getColor(MainActivity.this, R.color.red))
+                    .addSwipeLeftActionIcon(R.drawable.ic_delete)
+                    .addSwipeRightBackgroundColor(ContextCompat.getColor(MainActivity.this, R.color.teal_200))
+                    .addSwipeRightActionIcon(R.drawable.ic_edit)
+                    .create()
+                    .decorate();
+
+            super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive);
+        }
+    };
+    //---------------------------------------------------------------------------------------------
     private List<User> users(){
 
         users.add(new User("Иван", "+7959595959595"));
